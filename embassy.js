@@ -1,3 +1,19 @@
+import edgeEmbed from 'embed.js';
+/* https://github.com/Patrick-ring-motive/edge-embedding/blob/main/embed.js */
+
+const isArray = x => Array.isArray(x) || x instanceof Array;
+const isString = x => typeof x === 'string' || x instanceof String;
+const stringify = x =>{
+  try{
+    if(isString(x)){
+      return String(x);
+    }
+    return JSON.stringify(x);
+  }catch{
+    return String(x):
+  }
+};
+
 export class Embassy {
   static defaults = {
     /**
@@ -10,8 +26,11 @@ export class Embassy {
      *   await embed(text:string) => number[]
      */
     embedder: {
-      async embed() {
-        throw new Error("No embedder configured.");
+      async embed(texts) {
+        if(isArray(texts)){
+          return texts.map(edgEmbed);
+        }
+        return edgeEmbed(stringify(texts));
       }
     },
 
