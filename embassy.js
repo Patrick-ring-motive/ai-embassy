@@ -1,6 +1,7 @@
 import edgeEmbed from 'embed.js';
 /* https://github.com/Patrick-ring-motive/edge-embedding/blob/main/embed.js */
-
+import rank from 'reranker.js';
+/* https://github.com/Patrick-ring-motive/weighted-lcs-reranker/blob/main/reranker.js */
 const isArray = x => Array.isArray(x) || x instanceof Array;
 const isString = x => typeof x === 'string' || x instanceof String;
 const stringify = x =>{
@@ -62,7 +63,7 @@ export class Embassy {
      * Interface:
      *   rank(query, results) => results
      */
-    reranker: null,
+    reranker: {rank},
 
     /**
      * Hash function used as document id.
