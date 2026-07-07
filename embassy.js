@@ -82,8 +82,8 @@ export class Embassy {
     metadata(text) {
       return {
         text:
-          text.length > 1024
-            ? text.slice(0, 1021) + "..."
+          text.length > 8192
+            ? text.slice(0, 8189) + "..."
             : text
       };
     }
@@ -107,7 +107,7 @@ export class Embassy {
     let vectors = await embedder.embed(texts);
 
     // allow embed(string) shorthand
-    if (!Array.isArray(vectors[0]))
+    if (!isArray(vectors[0]))
       vectors = [vectors];
 
     return vectors;
