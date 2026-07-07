@@ -11,7 +11,7 @@ const stringify = x =>{
     }
     return JSON.stringify(x);
   }catch{
-    return String(x):
+    return String(x);
   }
 };
 
@@ -29,7 +29,7 @@ export class Embassy {
     embedder: {
       async embed(texts) {
         if(isArray(texts)){
-          return texts.map(edgEmbed);
+          return texts.map(edgeEmbed);
         }
         return edgeEmbed(stringify(texts));
       }
