@@ -1,6 +1,8 @@
 import edgeEmbeddingWorker from '../edge-embedding/embed.js';
 /* https://github.com/Patrick-ring-motive/edge-embedding/blob/main/embed.js */
-import { rank } from '../weighted-lcs-reranker/reranker.js';
+import {
+  rank
+} from '../weighted-lcs-reranker/reranker.js';
 /* https://github.com/Patrick-ring-motive/weighted-lcs-reranker/blob/main/reranker.js */
 import defaultChunker from '../sentence-chunker/chunker.js';
 const isArray = x => Array.isArray(x) || x instanceof Array;
