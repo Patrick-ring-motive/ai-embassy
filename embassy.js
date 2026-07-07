@@ -3,6 +3,7 @@ import edgeEmbeddingWorker from '../edge-embedding/embed.js';
 import { rank } from '../weighted-lcs-reranker/reranker.js';
 /* https://github.com/Patrick-ring-motive/weighted-lcs-reranker/blob/main/reranker.js */
 import defaultChunker from '../sentence-chunker/chunker.js';
+import { hash } from '../vector-hash/hash.js';
 const isArray = x => Array.isArray(x) || x instanceof Array;
 const isString = x => typeof x === 'string' || x instanceof String;
 const edgeEmbed = edgeEmbeddingWorker.edgeEmbed;
@@ -86,6 +87,21 @@ export class Embassy {
     storage: null,
 
     /**
+     * Optional id manifest.
+     *
+     * Records the exact vector ids written for each document so delete() can
+     * remove them without re-running the chunker; this keeps deletes correct
+     * even if the chunker changes between upsert and delete. Same interface as
+     * storage (keys are derived from the document text):
+     *   put(key, ids)   // ids is a serialized string
+     *   get(key)        // -> the stored string, or null/undefined if absent
+     *   delete(key)
+     * When absent — or when a specific entry is missing — delete() falls back
+     * to re-deriving the ids from the chunker.
+     */
+    manifest: null,
+
+    /**
      * Optional chunker.
      *
      * Interface:
@@ -112,16 +128,10 @@ export class Embassy {
     candidateLimit: 50,
 
     /**
-     * Hash function used as document id.
+     * Hash function used as document id. Defaults to SHA-256 hex (see
+     * ../hash/hash.js); called as a plain function so it can be swapped.
      */
-    async hash(text) {
-      const bytes = new TextEncoder().encode(text);
-      const digest = await crypto.subtle.digest("SHA-256", bytes);
-
-      return [...new Uint8Array(digest)]
-        .map(b => b.toString(16).padStart(2, "0"))
-        .join("");
-    },
+    hash,
 
     /**
      * Max UTF-8 byte length for text embedded in vector metadata when no
@@ -166,8 +176,9 @@ export class Embassy {
 
     let vectors = await embedder.embed(texts);
 
-    // allow embed(string) shorthand
-    if (!isArray(vectors[0]))
+    // Allow the embed(string) shorthand by wrapping a single flat vector as
+    // one row, but leave an empty result ([]) alone so embed([]) stays [].
+    if (vectors.length && !isArray(vectors[0]))
       vectors = [vectors];
 
     return vectors;
@@ -246,13 +257,55 @@ export class Embassy {
     });
   }
 
+  // Chunk `text` and derive the vector-db id for each chunk. Single source of
+  // truth for the id scheme so upsert() and delete() can't drift:
+  //   single chunk    -> hash(chunk.text)          (content-addressed; dedups)
+  //   multiple chunks -> `${hash(text)}:${index}`   (positional)
+  // Correct deletion therefore requires a deterministic chunker: it must
+  // produce the same chunks for the same input at delete time as at upsert
+  // time, otherwise the recomputed ids won't match and vectors are orphaned.
+  async #chunkAndIds(text) {
+    const { chunker, hash } = this.options;
+
+    const rawChunks = await chunker.chunk(text);
+    const chunks = this.#normalizeChunks(rawChunks);
+
+    if (chunks.length === 1) {
+      return { chunks, ids: [await hash(chunks[0].text)] };
+    }
+
+    const textHash = await hash(text);
+    const ids = chunks.map((_, i) => `${textHash}:${i}`);
+
+    return { chunks, ids };
+  }
+
+  // Manifest key for a document, derivable from the text alone (no chunker) so
+  // delete() can look up the recorded ids even if chunking has since changed.
+  async #manifestKey(text) {
+    const { hash } = this.options;
+    return `manifest:${await hash(text)}`;
+  }
+
+  // Reads the ids previously recorded under a manifest key. Returns an array of
+  // ids, or undefined when the entry is absent or not a usable array.
+  async #readManifestIds(manifestKey) {
+    const recorded = await this.options.manifest.get(manifestKey);
+
+    if (recorded == null)
+      return undefined;
+
+    const parsed = JSON.parse(recorded);
+    return isArray(parsed) ? parsed : undefined;
+  }
+
   async upsert(text, { vector } = {}) {
     const {
-      chunker,
       storage,
       hash,
       metadata,
-      maxMetadataBytes
+      maxMetadataBytes,
+      manifest
     } = this.options;
 
     // Upsert a caller-supplied vector directly, bypassing chunking/embedding.
@@ -269,29 +322,28 @@ export class Embassy {
       return 1;
     }
 
-    const rawChunks = await chunker.chunk(text);
-    const chunks = this.#normalizeChunks(rawChunks);
+    const { chunks, ids } = await this.#chunkAndIds(text);
+
+    // When a manifest is configured, look up what a previous upsert of this
+    // same text recorded, so we can clean up any ids the new chunking no longer
+    // covers (read before embedding so a manifest failure fails fast).
+    let manifestKey;
+    let previousIds;
+
+    if (manifest) {
+      manifestKey = await this.#manifestKey(text);
+      previousIds = await this.#readManifestIds(manifestKey);
+    }
 
     const vectors = await this.embed(
       chunks.map(c => c.text)
     );
 
-    // ID scheme (must match delete()):
-    //   single chunk    -> hash(chunk.text)
-    //   multiple chunks -> `${hash(text)}:${index}`
-    // Relies on the chunker producing the same number of chunks for the
-    // same input in both upsert() and delete().
-    const textHash = await hash(text);
-
     const entries = [];
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-
-      const id =
-        chunks.length === 1 ?
-        await hash(chunk.text) :
-        `${textHash}:${i}`;
+      const id = ids[i];
 
       let meta = chunk.metadata;
 
@@ -317,6 +369,27 @@ export class Embassy {
     }
 
     await this.vectordb.upsert(entries);
+
+    if (manifest) {
+      // Remove vectors from a previous upsert that the new chunking no longer
+      // produces (e.g. after a chunker change), so they don't linger as
+      // orphans. Ids still present are left alone — the upsert above already
+      // refreshed them.
+      if (previousIds) {
+        const current = new Set(ids);
+        const stale = previousIds.filter(id => !current.has(id));
+
+        if (stale.length) {
+          await this.vectordb.deleteMany(stale);
+
+          if (storage)
+            await Promise.all(stale.map(id => storage.delete(id)));
+        }
+      }
+
+      // Record the exact ids so delete() can find them without re-chunking.
+      await manifest.put(manifestKey, JSON.stringify(ids));
+    }
 
     return entries.length;
   }
@@ -353,7 +426,7 @@ export class Embassy {
       includeMetadata: true
     });
 
-    let results = await Promise.all(
+    const settled = await Promise.allSettled(
       matches.map(async result => {
         const resultMetadata = result?.metadata || {};
         let document;
@@ -388,6 +461,18 @@ export class Embassy {
       })
     );
 
+    // Keep the query resilient: a failed document lookup (e.g. a storage.get
+    // rejection) drops only that result instead of failing the whole query.
+    for (const outcome of settled) {
+      if (outcome.status === "rejected") {
+        console.warn("Embassy.query: dropping a result whose document could not be resolved.", outcome.reason);
+      }
+    }
+
+    let results = settled
+      .filter(outcome => outcome.status === "fulfilled")
+      .map(outcome => outcome.value);
+
     // Reranking needs a text query; skip it for vector-only queries.
     if (willRerank)
       results = await reranker.rank(text, results);
@@ -398,9 +483,9 @@ export class Embassy {
 
   async delete(text, { vector } = {}) {
     const {
-      chunker,
       storage,
-      hash
+      hash,
+      manifest
     } = this.options;
 
     // Delete a caller-supplied vector directly; id must match upsert(vector).
@@ -416,15 +501,18 @@ export class Embassy {
       return 1;
     }
 
-    const rawChunks = await chunker.chunk(text);
-    const chunks = this.#normalizeChunks(rawChunks);
-    const textHash = await hash(text);
+    // Prefer the recorded id manifest so deletion stays correct even if the
+    // chunker has changed since upsert; fall back to re-deriving the ids.
+    let ids;
+    let manifestKey;
 
-    // ID scheme must match upsert(): single -> hash(chunk.text),
-    // multiple -> `${hash(text)}:${index}`.
-    const ids =
-      chunks.length === 1 ? [await hash(chunks[0].text)] :
-      chunks.map((_, i) => `${textHash}:${i}`);
+    if (manifest) {
+      manifestKey = await this.#manifestKey(text);
+      ids = await this.#readManifestIds(manifestKey);
+    }
+
+    if (!ids)
+      ({ ids } = await this.#chunkAndIds(text));
 
     await this.vectordb.deleteMany(ids);
 
@@ -433,6 +521,9 @@ export class Embassy {
         ids.map(id => storage.delete(id))
       );
     }
+
+    if (manifest)
+      await manifest.delete(manifestKey);
 
     return ids.length;
   }
