@@ -4,13 +4,13 @@ import rank from 'reranker.js';
 /* https://github.com/Patrick-ring-motive/weighted-lcs-reranker/blob/main/reranker.js */
 const isArray = x => Array.isArray(x) || x instanceof Array;
 const isString = x => typeof x === 'string' || x instanceof String;
-const stringify = x =>{
-  try{
-    if(isString(x)){
+const stringify = x => {
+  try {
+    if (isString(x)) {
       return String(x);
     }
     return JSON.stringify(x);
-  }catch{
+  } catch {
     return String(x);
   }
 };
@@ -28,7 +28,7 @@ export class Embassy {
      */
     embedder: {
       async embed(texts) {
-        if(isArray(texts)){
+        if (isArray(texts)) {
           return texts.map(edgeEmbed);
         }
         return edgeEmbed(stringify(texts));
@@ -53,7 +53,9 @@ export class Embassy {
      */
     chunker: {
       async chunk(text) {
-        return [{ text }];
+        return [{
+          text
+        }];
       }
     },
 
@@ -63,7 +65,9 @@ export class Embassy {
      * Interface:
      *   rank(query, results) => results
      */
-    reranker: {rank},
+    reranker: {
+      rank
+    },
 
     /**
      * Hash function used as document id.
@@ -82,10 +86,9 @@ export class Embassy {
      */
     metadata(text) {
       return {
-        text:
-          text.length > 8192
-            ? text.slice(0, 8189) + "..."
-            : text
+        text: text.length > 8192 ?
+          text.slice(0, 8189) + "..." :
+          text
       };
     }
   };
@@ -103,7 +106,9 @@ export class Embassy {
   }
 
   async #embed(texts) {
-    const { embedder } = this.options;
+    const {
+      embedder
+    } = this.options;
 
     let vectors = await embedder.embed(texts);
 
@@ -134,9 +139,9 @@ export class Embassy {
       const chunk = chunks[i];
 
       const id =
-        chunks.length === 1
-          ? await hash(chunk.text)
-          : `${await hash(text)}:${i}`;
+        chunks.length === 1 ?
+        await hash(chunk.text) :
+        `${await hash(text)}:${i}`;
 
       let meta = chunk.metadata || {};
 
@@ -167,7 +172,10 @@ export class Embassy {
   }
 
   async query(text, limit = 10) {
-    const { storage, reranker } = this.options;
+    const {
+      storage,
+      reranker
+    } = this.options;
 
     const [vector] = await this.#embed([text]);
 
@@ -205,13 +213,13 @@ export class Embassy {
     const chunks = await chunker.chunk(text);
 
     const ids =
-      chunks.length === 1
-        ? [await hash(text)]
-        : await Promise.all(
-            chunks.map((_, i) =>
-              hash(text).then(h => `${h}:${i}`)
-            )
-          );
+      chunks.length === 1 ?
+      [await hash(text)] :
+      await Promise.all(
+        chunks.map((_, i) =>
+          hash(text).then(h => `${h}:${i}`)
+        )
+      );
 
     await this.vectordb.delete(ids);
 
