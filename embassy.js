@@ -87,8 +87,7 @@ export class Embassy {
     metadata(text) {
       return {
         text: text.length > 8192 ?
-          text.slice(0, 8189) + "..." :
-          text
+          text.slice(0, 8189) + "..." : text
       };
     }
   };
@@ -213,8 +212,7 @@ export class Embassy {
     const chunks = await chunker.chunk(text);
 
     const ids =
-      chunks.length === 1 ?
-      [await hash(text)] :
+      chunks.length === 1 ? [await hash(text)] :
       await Promise.all(
         chunks.map((_, i) =>
           hash(text).then(h => `${h}:${i}`)
