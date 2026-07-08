@@ -27,7 +27,13 @@ export const vectorizeAdapter = (index) => ({
     return index.upsert(records);
   },
 
-  async query({ vector, topK = 10, includeMetadata = false, includeValues = false, filter }) {
+  async query({
+    vector,
+    topK = 10,
+    includeMetadata = false,
+    includeValues = false,
+    filter
+  }) {
     const returnMetadata = includeMetadata ? "all" : "none";
     const cap = includeMetadata || includeValues ? 50 : 100;
 
@@ -37,7 +43,9 @@ export const vectorizeAdapter = (index) => ({
       topK: Math.min(topK, cap),
       returnMetadata,
       returnValues: includeValues,
-      ...(filter ? { filter } : {})
+      ...(filter ? {
+        filter
+      } : {})
     });
   },
 
