@@ -21,7 +21,10 @@
 
 // Cloudflare Vectorize lives in its own file so it can be edited/imported
 // independently.
-export { vectorizeAdapter } from "./vectorize.js";
+export {
+  vectorizeAdapter
+}
+from "./vectorize.js";
 
 /**
  * Pinecone (@pinecone-database/pinecone). Pass an index or namespace handle,
@@ -34,13 +37,21 @@ export const pineconeAdapter = (index) => ({
     return index.upsert(records);
   },
 
-  async query({ vector, topK = 10, includeMetadata = false, includeValues = false, filter }) {
+  async query({
+    vector,
+    topK = 10,
+    includeMetadata = false,
+    includeValues = false,
+    filter
+  }) {
     return index.query({
       vector,
       topK,
       includeMetadata,
       includeValues,
-      ...(filter ? { filter } : {})
+      ...(filter ? {
+        filter
+      } : {})
     });
   },
 
@@ -68,22 +79,35 @@ export const qdrantAdapter = (client, collection) => ({
     });
   },
 
-  async query({ vector, topK = 10, includeMetadata = false, filter }) {
+  async query({
+    vector,
+    topK = 10,
+    includeMetadata = false,
+    filter
+  }) {
     // client.search returns ScoredPoint[]: { id, score, payload, vector }.
     const points = await client.search(collection, {
       vector: Array.from(vector),
       limit: topK,
       with_payload: includeMetadata,
-      ...(filter ? { filter } : {})
+      ...(filter ? {
+        filter
+      } : {})
     });
 
     return {
-      matches: points.map(p => ({ id: p.id, score: p.score, metadata: p.payload ?? {} }))
+      matches: points.map(p => ({
+        id: p.id,
+        score: p.score,
+        metadata: p.payload ?? {}
+      }))
     };
   },
 
   async deleteMany(ids) {
-    return client.delete(collection, { points: ids });
+    return client.delete(collection, {
+      points: ids
+    });
   }
 });
 
@@ -111,13 +135,20 @@ export const milvusAdapter = (client, collectionName, {
     });
   },
 
-  async query({ vector, topK = 10, includeMetadata = false, filter }) {
+  async query({
+    vector,
+    topK = 10,
+    includeMetadata = false,
+    filter
+  }) {
     const res = await client.search({
       collection_name: collectionName,
       data: [Array.from(vector)],
       limit: topK,
       output_fields: includeMetadata ? outputFields : [idField],
-      ...(filter ? { filter } : {})
+      ...(filter ? {
+        filter
+      } : {})
     });
 
     // res.results: [{ [idField], score, [metadataField]?, ... }]
@@ -131,7 +162,10 @@ export const milvusAdapter = (client, collectionName, {
   },
 
   async deleteMany(ids) {
-    return client.delete({ collection_name: collectionName, ids });
+    return client.delete({
+      collection_name: collectionName,
+      ids
+    });
   }
 });
 
@@ -150,12 +184,19 @@ export const chromaAdapter = (collection) => ({
     });
   },
 
-  async query({ vector, topK = 10, includeMetadata = false, filter }) {
+  async query({
+    vector,
+    topK = 10,
+    includeMetadata = false,
+    filter
+  }) {
     const res = await collection.query({
       queryEmbeddings: [Array.from(vector)],
       nResults: topK,
       include: includeMetadata ? ["metadatas", "distances"] : ["distances"],
-      ...(filter ? { where: filter } : {})
+      ...(filter ? {
+        where: filter
+      } : {})
     });
 
     const ids = res.ids?.[0] ?? [];
@@ -172,7 +213,9 @@ export const chromaAdapter = (collection) => ({
   },
 
   async deleteMany(ids) {
-    return collection.delete({ ids });
+    return collection.delete({
+      ids
+    });
   }
 });
 
@@ -195,12 +238,21 @@ export const weaviateAdapter = (collection) => ({
     );
   },
 
-  async query({ vector, topK = 10, includeMetadata = false, filter }) {
+  async query({
+    vector,
+    topK = 10,
+    includeMetadata = false,
+    filter
+  }) {
     const res = await collection.query.nearVector(Array.from(vector), {
       limit: topK,
       returnMetadata: ["distance"],
-      ...(includeMetadata ? {} : { returnProperties: [] }),
-      ...(filter ? { filters: filter } : {})
+      ...(includeMetadata ? {} : {
+        returnProperties: []
+      }),
+      ...(filter ? {
+        filters: filter
+      } : {})
     });
 
     // res.objects: [{ uuid, properties, metadata: { distance } }]
@@ -236,7 +288,11 @@ export const pgvectorAdapter = (pool, {
   metadataColumn = "metadata",
   metric = "cosine"
 } = {}) => {
-  const operator = { cosine: "<=>", l2: "<->", ip: "<#>" }[metric] ?? "<=>";
+  const operator = {
+    cosine: "<=>",
+    l2: "<->",
+    ip: "<#>"
+  } [metric] ?? "<=>";
   const toVector = values => `[${Array.from(values).join(",")}]`;
 
   return {
@@ -253,18 +309,27 @@ export const pgvectorAdapter = (pool, {
       }
     },
 
-    async query({ vector, topK = 10 }) {
+    async query({
+      vector,
+      topK = 10
+    }) {
       const sql =
         `SELECT ${idColumn} AS id, ${metadataColumn} AS metadata, ` +
         `${vectorColumn} ${operator} $1 AS score ` +
         `FROM ${table} ORDER BY ${vectorColumn} ${operator} $1 LIMIT $2`;
 
-      const { rows } = await pool.query(sql, [toVector(vector), topK]);
+      const {
+        rows
+      } = await pool.query(sql, [toVector(vector), topK]);
 
       // <=> (cosine) and <-> (L2) are distances (lower = closer); <#> is the
       // negative inner product.
       return {
-        matches: rows.map(row => ({ id: row.id, score: row.score, metadata: row.metadata ?? {} }))
+        matches: rows.map(row => ({
+          id: row.id,
+          score: row.score,
+          metadata: row.metadata ?? {}
+        }))
       };
     },
 
