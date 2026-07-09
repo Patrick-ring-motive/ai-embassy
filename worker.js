@@ -22,15 +22,21 @@
  *   # binding = "STORAGE"
  *   # id = "..."
  */
-import { Embassy } from "./embassy.js";
-import { vectorizeAdapter } from "./adapters/vectorize.js";
+import {
+  Embassy
+} from "./embassy.js";
+import {
+  vectorizeAdapter
+} from "./adapters/vectorize.js";
 
 const isString = x => typeof x === "string" || x instanceof String;
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: {
+      "Content-Type": "application/json"
+    }
   });
 
 // Adapt a Workers KV namespace to Embassy's { put, get, delete } interface.
@@ -71,13 +77,22 @@ export default {
       const embassy = makeEmbassy(env);
 
       if (path === "/upsert" && request.method === "POST") {
-        const { text, vector } = await request.json();
+        const {
+          text,
+          vector
+        } = await request.json();
 
         if (text == null && vector == null)
-          return json({ error: 'Provide "text" or "vector".' }, 400);
+          return json({
+            error: 'Provide "text" or "vector".'
+          }, 400);
 
-        const count = await embassy.upsert(text, vector != null ? { vector } : {});
-        return json({ upserted: count });
+        const count = await embassy.upsert(text, vector != null ? {
+          vector
+        } : {});
+        return json({
+          upserted: count
+        });
       }
 
       if (path === "/query") {
@@ -89,31 +104,58 @@ export default {
           const n = raw == null ? NaN : Number(raw);
           limit = Number.isFinite(n) ? n : undefined;
         } else if (request.method === "POST") {
-          ({ text, limit, vector } = await request.json());
+          ({
+            text,
+            limit,
+            vector
+          } = await request.json());
         } else {
-          return json({ error: "Method not allowed. Use GET or POST." }, 405);
+          return json({
+            error: "Method not allowed. Use GET or POST."
+          }, 405);
         }
 
         if (text == null && vector == null)
-          return json({ error: 'Provide "text" or "vector".' }, 400);
+          return json({
+            error: 'Provide "text" or "vector".'
+          }, 400);
 
-        const results = await embassy.query(text, limit ?? 10, vector != null ? { vector } : {});
-        return json({ count: results.length, results });
+        const results = await embassy.query(text, limit ?? 10, vector != null ? {
+          vector
+        } : {});
+        return json({
+          count: results.length,
+          results
+        });
       }
 
       if (path === "/delete" && request.method === "POST") {
-        const { text, vector } = await request.json();
+        const {
+          text,
+          vector
+        } = await request.json();
 
         if (text == null && vector == null)
-          return json({ error: 'Provide "text" or "vector".' }, 400);
+          return json({
+            error: 'Provide "text" or "vector".'
+          }, 400);
 
-        const count = await embassy.delete(text, vector != null ? { vector } : {});
-        return json({ deleted: count });
+        const count = await embassy.delete(text, vector != null ? {
+          vector
+        } : {});
+        return json({
+          deleted: count
+        });
       }
 
-      return json({ error: "Not found." }, 404);
+      return json({
+        error: "Not found."
+      }, 404);
     } catch (error) {
-      return json({ error: "Internal server error", message: error.message }, 500);
+      return json({
+        error: "Internal server error",
+        message: error.message
+      }, 500);
     }
   }
 };
