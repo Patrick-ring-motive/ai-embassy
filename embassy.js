@@ -1,9 +1,13 @@
 import edgeEmbeddingWorker from '../edge-embedding/embed.js';
 /* https://github.com/Patrick-ring-motive/edge-embedding/blob/main/embed.js */
-import { rank } from '../weighted-lcs-reranker/reranker.js';
+import {
+  rank
+} from '../weighted-lcs-reranker/reranker.js';
 /* https://github.com/Patrick-ring-motive/weighted-lcs-reranker/blob/main/reranker.js */
 import defaultChunker from '../sentence-chunker/chunker.js';
-import { hash } from '../vector-hash/hash.js';
+import {
+  hash
+} from '../vector-hash/hash.js';
 const isArray = x => Array.isArray(x) || x instanceof Array;
 const isString = x => typeof x === 'string' || x instanceof String;
 const edgeEmbed = edgeEmbeddingWorker.edgeEmbed;
@@ -32,7 +36,9 @@ const truncateToBytes = (text, maxBytes) => {
 
   const suffix = "...";
   const budget = Math.max(0, maxBytes - encoder.encode(suffix).length);
-  const { read } = encoder.encodeInto(str, new Uint8Array(budget));
+  const {
+    read
+  } = encoder.encodeInto(str, new Uint8Array(budget));
 
   return str.slice(0, read) + suffix;
 };
@@ -190,7 +196,10 @@ export class Embassy {
    * a one-time probe (embed of an empty string) memoized per embedder.
    */
   #getVectorSize() {
-    const { embedder, vectorSize } = this.options;
+    const {
+      embedder,
+      vectorSize
+    } = this.options;
 
     if (vectorSize != null)
       return Promise.resolve(vectorSize);
@@ -265,25 +274,36 @@ export class Embassy {
   // produce the same chunks for the same input at delete time as at upsert
   // time, otherwise the recomputed ids won't match and vectors are orphaned.
   async #chunkAndIds(text) {
-    const { chunker, hash } = this.options;
+    const {
+      chunker,
+      hash
+    } = this.options;
 
     const rawChunks = await chunker.chunk(text);
     const chunks = this.#normalizeChunks(rawChunks);
 
     if (chunks.length === 1) {
-      return { chunks, ids: [await hash(chunks[0].text)] };
+      return {
+        chunks,
+        ids: [await hash(chunks[0].text)]
+      };
     }
 
     const textHash = await hash(text);
     const ids = chunks.map((_, i) => `${textHash}:${i}`);
 
-    return { chunks, ids };
+    return {
+      chunks,
+      ids
+    };
   }
 
   // Manifest key for a document, derivable from the text alone (no chunker) so
   // delete() can look up the recorded ids even if chunking has since changed.
   async #manifestKey(text) {
-    const { hash } = this.options;
+    const {
+      hash
+    } = this.options;
     return `manifest:${await hash(text)}`;
   }
 
@@ -299,7 +319,9 @@ export class Embassy {
     return isArray(parsed) ? parsed : undefined;
   }
 
-  async upsert(text, { vector } = {}) {
+  async upsert(text, {
+    vector
+  } = {}) {
     const {
       storage,
       hash,
@@ -316,13 +338,18 @@ export class Embassy {
       await this.vectordb.upsert([{
         id,
         values,
-        metadata: storage ? { id } : {}
+        metadata: storage ? {
+          id
+        } : {}
       }]);
 
       return 1;
     }
 
-    const { chunks, ids } = await this.#chunkAndIds(text);
+    const {
+      chunks,
+      ids
+    } = await this.#chunkAndIds(text);
 
     // When a manifest is configured, look up what a previous upsert of this
     // same text recorded, so we can clean up any ids the new chunking no longer
@@ -394,7 +421,9 @@ export class Embassy {
     return entries.length;
   }
 
-  async query(text, limit = 10, { vector } = {}) {
+  async query(text, limit = 10, {
+    vector
+  } = {}) {
     const args = [...arguments];
     const {
       storage,
@@ -420,7 +449,9 @@ export class Embassy {
       Math.min(Math.max(limit, candidateLimit), MAX_CANDIDATES) :
       Math.min(limit, MAX_CANDIDATES);
 
-    const { matches = [] } = await this.vectordb.query({
+    const {
+      matches = []
+    } = await this.vectordb.query({
       vector: queryVector,
       topK: poolSize,
       includeMetadata: true
@@ -437,7 +468,7 @@ export class Embassy {
             // fall back to the stringified metadata we already have. Not
             // recommended in general, but handy for small/side-project
             // indexes that may contain foreign or id-less vectors.
-            console.warn("Embassy.query: vector result missing metadata.id; falling back to stringified metadata.", result,...args);
+            console.warn("Embassy.query: vector result missing metadata.id; falling back to stringified metadata.", result, ...args);
             document = stringify(resultMetadata);
           } else {
             document = await storage.get(resultMetadata.id);
@@ -481,7 +512,9 @@ export class Embassy {
     return results.slice(0, limit);
   }
 
-  async delete(text, { vector } = {}) {
+  async delete(text, {
+    vector
+  } = {}) {
     const {
       storage,
       hash,
@@ -512,7 +545,9 @@ export class Embassy {
     }
 
     if (!ids)
-      ({ ids } = await this.#chunkAndIds(text));
+      ({
+        ids
+      } = await this.#chunkAndIds(text));
 
     await this.vectordb.deleteMany(ids);
 
