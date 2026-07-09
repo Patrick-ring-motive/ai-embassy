@@ -28,7 +28,9 @@
 // Cosine similarity over the overlapping prefix of the two vectors. Returns 0
 // when either vector has zero magnitude (avoids divide-by-zero / NaN).
 const cosine = (a, b) => {
-  let dot = 0, na = 0, nb = 0;
+  let dot = 0,
+    na = 0,
+    nb = 0;
   const len = Math.min(a.length, b.length);
 
   for (let i = 0; i < len; i++) {
@@ -63,9 +65,15 @@ const KEY_PREFIX = "vectorish:";
 
 // Map-like: a Map, or anything exposing get/set/delete plus a values() iterator.
 const mapBacking = (map) => ({
-  async set(id, record) { map.set(id, record); },
-  async delete(id) { return map.delete(id); },
-  async *values() { yield* map.values(); }
+  async set(id, record) {
+    map.set(id, record);
+  },
+  async delete(id) {
+    return map.delete(id);
+  },
+  async * values() {
+    yield* map.values();
+  }
 });
 
 // Web Storage (localStorage / sessionStorage): values must be strings, so
@@ -80,7 +88,7 @@ const storageBacking = (storage) => ({
     storage.removeItem(key);
     return existed;
   },
-  async *values() {
+  async * values() {
     for (let i = 0; i < storage.length; i++) {
       const key = storage.key(i);
       if (key?.startsWith(KEY_PREFIX)) {
@@ -100,14 +108,16 @@ const cacheBacking = (cache) => ({
     await cache.put(
       cacheUrl(id),
       new Response(JSON.stringify(record), {
-        headers: { "content-type": "application/json" }
+        headers: {
+          "content-type": "application/json"
+        }
       })
     );
   },
   async delete(id) {
     return cache.delete(cacheUrl(id));
   },
-  async *values() {
+  async * values() {
     for (const request of await cache.keys()) {
       const response = await cache.match(request);
       if (response) yield await response.json();
@@ -127,8 +137,12 @@ const cookieBacking = (cookieStore) => ({
     await cookieStore.delete(name);
     return existed;
   },
-  async *values() {
-    for (const { name, value } of await cookieStore.getAll()) {
+  async * values() {
+    for (const {
+        name,
+        value
+      }
+      of await cookieStore.getAll()) {
       if (name.startsWith(KEY_PREFIX)) yield JSON.parse(decodeURIComponent(value));
     }
   }
@@ -157,23 +171,34 @@ const idbBacking = (backing) => {
         request.onupgradeneeded = () => {
           const db = request.result;
           if (!db.objectStoreNames.contains(IDB_STORE_NAME))
-            db.createObjectStore(IDB_STORE_NAME, { keyPath: "id" });
+            db.createObjectStore(IDB_STORE_NAME, {
+              keyPath: "id"
+            });
         };
-        request.onsuccess = () => resolve({ db: request.result, storeName: IDB_STORE_NAME });
+        request.onsuccess = () => resolve({
+          db: request.result,
+          storeName: IDB_STORE_NAME
+        });
         request.onerror = () => reject(request.error);
       });
     } else {
-      const storeName = backing.objectStoreNames?.contains(IDB_STORE_NAME)
-        ? IDB_STORE_NAME
-        : backing.objectStoreNames?.[0];
-      ready = Promise.resolve({ db: backing, storeName });
+      const storeName = backing.objectStoreNames?.contains(IDB_STORE_NAME) ?
+        IDB_STORE_NAME :
+        backing.objectStoreNames?.[0];
+      ready = Promise.resolve({
+        db: backing,
+        storeName
+      });
     }
 
     return ready;
   };
 
   const objectStore = async (mode) => {
-    const { db, storeName } = await connect();
+    const {
+      db,
+      storeName
+    } = await connect();
     return db.transaction(storeName, mode).objectStore(storeName);
   };
 
@@ -188,7 +213,7 @@ const idbBacking = (backing) => {
       await idbRequest(store.delete(id));
       return existing !== undefined;
     },
-    async *values() {
+    async * values() {
       const store = await objectStore("readonly");
       yield* await idbRequest(store.getAll());
     }
@@ -212,14 +237,14 @@ const normalizeBacking = (backing) => {
   if (typeof backing.cmp === "function" || typeof backing.transaction === "function")
     return idbBacking(backing);
 
-  if (typeof backing.get === "function"
-    && typeof backing.set === "function"
-    && typeof backing.delete === "function")
+  if (typeof backing.get === "function" &&
+    typeof backing.set === "function" &&
+    typeof backing.delete === "function")
     return mapBacking(backing);
 
   throw new TypeError(
-    "vectorish: unsupported backing — expected a Map-like object, Web Storage, "
-    + "Cache, CookieStore, or IndexedDB."
+    "vectorish: unsupported backing — expected a Map-like object, Web Storage, " +
+    "Cache, CookieStore, or IndexedDB."
   );
 };
 
@@ -247,10 +272,18 @@ export const vectorish = (backing) => {
           metadata: r.metadata ?? {}
         });
       }
-      return { upsertedCount: records.length };
+      return {
+        upsertedCount: records.length
+      };
     },
 
-    async query({ vector, topK = 10, includeMetadata = false, includeValues = false, filter } = {}) {
+    async query({
+      vector,
+      topK = 10,
+      includeMetadata = false,
+      includeValues = false,
+      filter
+    } = {}) {
       const matches = [];
 
       for await (const rec of backend.values()) {
@@ -259,13 +292,19 @@ export const vectorish = (backing) => {
         matches.push({
           id: rec.id,
           score: cosine(vector, rec.values),
-          ...(includeMetadata ? { metadata: rec.metadata } : {}),
-          ...(includeValues ? { values: rec.values } : {})
+          ...(includeMetadata ? {
+            metadata: rec.metadata
+          } : {}),
+          ...(includeValues ? {
+            values: rec.values
+          } : {})
         });
       }
 
       matches.sort((a, b) => b.score - a.score);
-      return { matches: matches.slice(0, topK) };
+      return {
+        matches: matches.slice(0, topK)
+      };
     },
 
     async deleteMany(ids) {
@@ -273,7 +312,9 @@ export const vectorish = (backing) => {
       for (const id of ids) {
         if (await backend.delete(id)) deletedCount++;
       }
-      return { deletedCount };
+      return {
+        deletedCount
+      };
     }
   };
 };
